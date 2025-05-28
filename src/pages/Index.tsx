@@ -1,10 +1,17 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, SkipForward, Plus, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Task {
   id: number;
@@ -19,6 +26,9 @@ const Index = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTask, setNewTask] = useState('');
   const [completedPomodoros, setCompletedPomodoros] = useState(0);
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertDescription, setAlertDescription] = useState('');
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -91,16 +101,21 @@ const Index = () => {
   const handleTimerComplete = () => {
     if (mode === 'pomodoro') {
       setCompletedPomodoros(prev => prev + 1);
+      setAlertTitle('Task Time Complete!');
+      setAlertDescription('Great work! Time for a well-deserved break. Take a moment to relax and recharge.');
       toast({
         title: "Pomodoro Complete!",
         description: "Time for a break. Great work!",
       });
     } else {
+      setAlertTitle('Break Time Complete!');
+      setAlertDescription('Break time is over! Ready to get back to work and be productive?');
       toast({
         title: "Break Complete!",
         description: "Ready to get back to work?",
       });
     }
+    setShowAlert(true);
   };
 
   const toggleTimer = () => {
@@ -188,8 +203,17 @@ const Index = () => {
               size="lg"
               className="bg-white text-gray-800 hover:bg-gray-100 px-8 py-3 text-lg font-semibold rounded-full shadow-lg transition-all hover:scale-105"
             >
-              {isRunning ? <Pause className="mr-2" size={20} /> : <Play className="mr-2" size={20} />}
-              {isRunning ? 'Pause' : 'Start'}
+              {isRunning ? (
+                <>
+                  <Pause className="mr-2" size={20} />
+                  Pause
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2" size={20} />
+                  Start
+                </>
+              )}
             </Button>
             
             <Button
@@ -278,6 +302,26 @@ const Index = () => {
           </Card>
         </div>
       </div>
+
+      {/* Alert Dialog */}
+      <AlertDialog open={showAlert} onOpenChange={setShowAlert}>
+        <AlertDialogContent className="bg-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-gray-800 text-xl">
+              {alertTitle}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600">
+              {alertDescription}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogAction 
+            onClick={() => setShowAlert(false)}
+            className="bg-blue-500 hover:bg-blue-600 text-white"
+          >
+            OK
+          </AlertDialogAction>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
