@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
+import TimerSettings from '@/components/TimerSettings';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +22,12 @@ interface Task {
 
 const Index = () => {
   const [mode, setMode] = useState<'pomodoro' | 'shortBreak' | 'longBreak'>('pomodoro');
-  const [timeLeft, setTimeLeft] = useState(25 * 60); // 25 minutes in seconds
+  const [customTimes, setCustomTimes] = useState({
+    pomodoroTime: 25 * 60,
+    shortBreakTime: 5 * 60,
+    longBreakTime: 15 * 60,
+  });
+  const [timeLeft, setTimeLeft] = useState(customTimes.pomodoroTime);
   const [isRunning, setIsRunning] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTask, setNewTask] = useState('');
@@ -34,19 +40,19 @@ const Index = () => {
 
   const modeConfig = {
     pomodoro: { 
-      duration: 25 * 60, 
+      duration: customTimes.pomodoroTime, 
       label: 'Pomodoro',
       bgClass: 'bg-gradient-to-br from-red-400 via-red-500 to-pink-500',
       textColor: 'text-white'
     },
     shortBreak: { 
-      duration: 5 * 60, 
+      duration: customTimes.shortBreakTime, 
       label: 'Short Break',
       bgClass: 'bg-gradient-to-br from-green-400 via-green-500 to-teal-500',
       textColor: 'text-white'
     },
     longBreak: { 
-      duration: 15 * 60, 
+      duration: customTimes.longBreakTime, 
       label: 'Long Break',
       bgClass: 'bg-gradient-to-br from-blue-400 via-blue-500 to-indigo-500',
       textColor: 'text-white'
@@ -133,6 +139,19 @@ const Index = () => {
     setTimeLeft(modeConfig[newMode].duration);
   };
 
+  const handleSettingsChange = (newSettings: {
+    pomodoroTime: number;
+    shortBreakTime: number;
+    longBreakTime: number;
+  }) => {
+    setCustomTimes(newSettings);
+    // Reset current timer to new duration if not running
+    if (!isRunning) {
+      const newDuration = newSettings[`${mode}Time` as keyof typeof newSettings];
+      setTimeLeft(newDuration);
+    }
+  };
+
   const addTask = () => {
     if (newTask.trim()) {
       setTasks(prev => [...prev, {
@@ -167,7 +186,16 @@ const Index = () => {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">Pomofocus</h1>
+          <div className="flex justify-between items-center mb-2">
+            <div></div>
+            <h1 className="text-4xl font-bold">Pomofocus</h1>
+            <TimerSettings
+              pomodoroTime={customTimes.pomodoroTime}
+              shortBreakTime={customTimes.shortBreakTime}
+              longBreakTime={customTimes.longBreakTime}
+              onSettingsChange={handleSettingsChange}
+            />
+          </div>
           <p className="text-lg opacity-90">A Pomodoro Timer to Boost Your Productivity</p>
         </div>
 
