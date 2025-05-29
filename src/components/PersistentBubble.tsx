@@ -169,7 +169,6 @@ const PersistentBubble = ({
             onExpand();
           }}
           isVisible={isVisible}
-          onExpand={onExpand}
         />
       );
     }
