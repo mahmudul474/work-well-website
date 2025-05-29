@@ -1,6 +1,5 @@
-
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, SkipForward, Plus, Check, X, Minimize2, Settings } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, Check, X, Minimize2, Settings, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
