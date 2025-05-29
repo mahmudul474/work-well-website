@@ -1,10 +1,14 @@
+
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, SkipForward, Plus, Check, X, Minimize2, Maximize2 } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, Check, X, Minimize2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import TimerSettings from '@/components/TimerSettings';
+import RingtoneSettings from '@/components/RingtoneSettings';
+import PersistentBubble from '@/components/PersistentBubble';
+import { getRandomSuccessMessage, getRandomMotivationalMessage } from '@/utils/motivationalMessages';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,13 +17,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 
 interface Task {
   id: number;
   text: string;
   completed: boolean;
   status: 'pending' | 'in-progress' | 'completed';
-  timeSpent: number; // in seconds
+  timeSpent: number;
   startTime?: number;
 }
 
@@ -39,7 +51,9 @@ const Index = () => {
   const [alertTitle, setAlertTitle] = useState('');
   const [alertDescription, setAlertDescription] = useState('');
   const [isBubbleMode, setIsBubbleMode] = useState(false);
+  const [showPersistentBubble, setShowPersistentBubble] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
+  const [customRingtone, setCustomRingtone] = useState<string | null>(null);
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const taskTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -115,7 +129,23 @@ const Index = () => {
   }, [isRunning, timeLeft]);
 
   const playNotification = () => {
-    // Create a simple beep sound
+    if (customRingtone) {
+      try {
+        const audio = new Audio(customRingtone);
+        audio.volume = 0.5;
+        audio.play().catch(() => {
+          // Fallback to default sound if custom ringtone fails
+          playDefaultSound();
+        });
+      } catch {
+        playDefaultSound();
+      }
+    } else {
+      playDefaultSound();
+    }
+  };
+
+  const playDefaultSound = () => {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
@@ -136,6 +166,8 @@ const Index = () => {
   const handleTimerComplete = () => {
     if (mode === 'pomodoro') {
       setCompletedPomodoros(prev => prev + 1);
+      const wasTaskCompleted = activeTaskId !== null;
+      
       if (activeTaskId) {
         setTasks(prev => prev.map(task => 
           task.id === activeTaskId 
@@ -144,14 +176,25 @@ const Index = () => {
         ));
         setActiveTaskId(null);
       }
-      setAlertTitle('Task Time Complete!');
-      setAlertDescription('Great work! Time for a well-deserved break. Take a moment to relax and recharge.');
-      toast({
-        title: "Pomodoro Complete!",
-        description: "Time for a break. Great work!",
-      });
+
+      if (wasTaskCompleted) {
+        const successMsg = getRandomSuccessMessage();
+        setAlertTitle('🎉 Task Completed!');
+        setAlertDescription(successMsg);
+        toast({
+          title: "Task Completed!",
+          description: successMsg,
+        });
+      } else {
+        setAlertTitle('⏰ Pomodoro Complete!');
+        setAlertDescription('Great work! Time for a well-deserved break. Take a moment to relax and recharge.');
+        toast({
+          title: "Pomodoro Complete!",
+          description: "Time for a break. Great work!",
+        });
+      }
     } else {
-      setAlertTitle('Break Time Complete!');
+      setAlertTitle('🔄 Break Complete!');
       setAlertDescription('Break time is over! Ready to get back to work and be productive?');
       toast({
         title: "Break Complete!",
@@ -161,16 +204,33 @@ const Index = () => {
     setShowAlert(true);
   };
 
+  // Handle incomplete tasks (when timer is reset or mode switched during active task)
+  const handleIncompleteTask = () => {
+    if (activeTaskId && isRunning && mode === 'pomodoro') {
+      const motivationalMsg = getRandomMotivationalMessage();
+      toast({
+        title: "Keep Going! 💪",
+        description: motivationalMsg,
+      });
+    }
+  };
+
   const toggleTimer = () => {
     setIsRunning(!isRunning);
   };
 
   const resetTimer = () => {
+    if (isRunning) {
+      handleIncompleteTask();
+    }
     setIsRunning(false);
     setTimeLeft(modeConfig[mode].duration);
   };
 
   const switchMode = (newMode: 'pomodoro' | 'shortBreak' | 'longBreak') => {
+    if (isRunning && mode !== newMode) {
+      handleIncompleteTask();
+    }
     setMode(newMode);
     setIsRunning(false);
     setTimeLeft(modeConfig[newMode].duration);
@@ -182,7 +242,6 @@ const Index = () => {
     longBreakTime: number;
   }) => {
     setCustomTimes(newSettings);
-    // Reset current timer to new duration if not running
     if (!isRunning) {
       const newDuration = newSettings[`${mode}Time` as keyof typeof newSettings];
       setTimeLeft(newDuration);
@@ -250,6 +309,7 @@ const Index = () => {
   };
 
   const currentConfig = modeConfig[mode];
+  const activeTask = tasks.find(task => task.id === activeTaskId);
 
   // Bubble Mode Component
   if (isBubbleMode) {
@@ -305,206 +365,255 @@ const Index = () => {
   }
 
   return (
-    <div className={`min-h-screen transition-all duration-1000 ${currentConfig.bgClass} ${currentConfig.textColor}`}>
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <Button
-              onClick={() => setIsBubbleMode(true)}
-              variant="ghost"
-              className="text-white hover:bg-white/20 px-3 py-2"
-            >
-              <Minimize2 size={16} className="mr-2" />
-              Bubble Mode
-            </Button>
-            <h1 className="text-4xl font-bold">Pomofocus</h1>
-            <TimerSettings
-              pomodoroTime={customTimes.pomodoroTime}
-              shortBreakTime={customTimes.shortBreakTime}
-              longBreakTime={customTimes.longBreakTime}
-              onSettingsChange={handleSettingsChange}
-            />
-          </div>
-          <p className="text-lg opacity-90">A Pomodoro Timer to Boost Your Productivity</p>
-        </div>
+    <>
+      <PersistentBubble
+        isVisible={showPersistentBubble}
+        onClose={() => setShowPersistentBubble(false)}
+        onExpand={() => {
+          setShowPersistentBubble(false);
+          setIsBubbleMode(false);
+        }}
+        timeLeft={timeLeft}
+        isRunning={isRunning}
+        onToggleTimer={toggleTimer}
+        onResetTimer={resetTimer}
+        currentMode={currentConfig.label}
+        activeTask={activeTask?.text}
+      />
 
-        {/* Mode Switcher */}
-        <div className="flex justify-center mb-8">
-          <div className="bg-white/20 backdrop-blur-sm rounded-lg p-1 flex gap-1">
-            {(Object.keys(modeConfig) as Array<keyof typeof modeConfig>).map((modeKey) => (
+      <div className={`min-h-screen transition-all duration-1000 ${currentConfig.bgClass} ${currentConfig.textColor}`}>
+        <div className="container mx-auto px-4 py-8">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    setIsBubbleMode(true);
+                    setShowPersistentBubble(true);
+                  }}
+                  variant="ghost"
+                  className="text-white hover:bg-white/20 px-3 py-2"
+                >
+                  <Minimize2 size={16} className="mr-2" />
+                  Bubble Mode
+                </Button>
+              </div>
+              
+              <h1 className="text-4xl font-bold">Pomofocus</h1>
+              
+              <div className="flex gap-2">
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button variant="ghost" className="text-white hover:bg-white/20 px-3 py-2">
+                      <Settings size={16} className="mr-2" />
+                      Sounds
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent>
+                    <SheetHeader>
+                      <SheetTitle>Notification Settings</SheetTitle>
+                      <SheetDescription>
+                        Customize your timer notification sounds
+                      </SheetDescription>
+                    </SheetHeader>
+                    <div className="mt-6">
+                      <RingtoneSettings
+                        currentRingtone={customRingtone}
+                        onRingtoneChange={setCustomRingtone}
+                      />
+                    </div>
+                  </SheetContent>
+                </Sheet>
+                
+                <TimerSettings
+                  pomodoroTime={customTimes.pomodoroTime}
+                  shortBreakTime={customTimes.shortBreakTime}
+                  longBreakTime={customTimes.longBreakTime}
+                  onSettingsChange={handleSettingsChange}
+                />
+              </div>
+            </div>
+            <p className="text-lg opacity-90">A Pomodoro Timer to Boost Your Productivity</p>
+          </div>
+
+          {/* Mode Switcher */}
+          <div className="flex justify-center mb-8">
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-1 flex gap-1">
+              {(Object.keys(modeConfig) as Array<keyof typeof modeConfig>).map((modeKey) => (
+                <Button
+                  key={modeKey}
+                  onClick={() => switchMode(modeKey)}
+                  variant={mode === modeKey ? "default" : "ghost"}
+                  className={`px-6 py-2 rounded-md transition-all ${
+                    mode === modeKey 
+                      ? 'bg-white text-gray-800 shadow-lg' 
+                      : 'text-white hover:bg-white/20'
+                  }`}
+                >
+                  {modeConfig[modeKey].label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Timer Display */}
+          <div className="text-center mb-8">
+            <div className="text-8xl font-bold mb-6 font-mono tracking-wider">
+              {formatTime(timeLeft)}
+            </div>
+            
+            <div className="flex justify-center gap-4">
               <Button
-                key={modeKey}
-                onClick={() => switchMode(modeKey)}
-                variant={mode === modeKey ? "default" : "ghost"}
-                className={`px-6 py-2 rounded-md transition-all ${
-                  mode === modeKey 
-                    ? 'bg-white text-gray-800 shadow-lg' 
-                    : 'text-white hover:bg-white/20'
-                }`}
+                onClick={toggleTimer}
+                size="lg"
+                className="bg-white text-gray-800 hover:bg-gray-100 px-8 py-3 text-lg font-semibold rounded-full shadow-lg transition-all hover:scale-105"
               >
-                {modeConfig[modeKey].label}
+                {isRunning ? (
+                  <>
+                    <Pause className="mr-2" size={20} />
+                    Pause
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2" size={20} />
+                    Start
+                  </>
+                )}
               </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Timer Display */}
-        <div className="text-center mb-8">
-          <div className="text-8xl font-bold mb-6 font-mono tracking-wider">
-            {formatTime(timeLeft)}
-          </div>
-          
-          <div className="flex justify-center gap-4">
-            <Button
-              onClick={toggleTimer}
-              size="lg"
-              className="bg-white text-gray-800 hover:bg-gray-100 px-8 py-3 text-lg font-semibold rounded-full shadow-lg transition-all hover:scale-105"
-            >
-              {isRunning ? (
-                <>
-                  <Pause className="mr-2" size={20} />
-                  Pause
-                </>
-              ) : (
-                <>
-                  <Play className="mr-2" size={20} />
-                  Start
-                </>
-              )}
-            </Button>
-            
-            <Button
-              onClick={resetTimer}
-              size="lg"
-              variant="outline"
-              className="border-white text-white hover:bg-white hover:text-gray-800 px-6 py-3 rounded-full transition-all"
-            >
-              <SkipForward size={20} />
-            </Button>
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className="text-center mb-8">
-          <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4 inline-block">
-            <div className="text-2xl font-bold">{completedPomodoros}</div>
-            <div className="text-sm opacity-80">Pomodoros Completed</div>
-          </div>
-        </div>
-
-        {/* Task Section */}
-        <div className="max-w-2xl mx-auto">
-          <Card className="bg-white/10 backdrop-blur-sm border-white/20 p-6">
-            <h2 className="text-xl font-semibold mb-4 text-center">Tasks</h2>
-            
-            {/* Add Task */}
-            <div className="flex gap-2 mb-4">
-              <Input
-                value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addTask()}
-                placeholder="Add a task..."
-                className="bg-white/20 border-white/30 text-white placeholder:text-white/60 focus:bg-white/30"
-              />
+              
               <Button
-                onClick={addTask}
-                size="sm"
-                className="bg-white text-gray-800 hover:bg-gray-100 px-3"
+                onClick={resetTimer}
+                size="lg"
+                variant="outline"
+                className="border-white text-white hover:bg-white hover:text-gray-800 px-6 py-3 rounded-full transition-all"
               >
-                <Plus size={16} />
+                <SkipForward size={20} />
               </Button>
             </div>
+          </div>
 
-            {/* Task List */}
-            <div className="space-y-2">
-              {tasks.length === 0 ? (
-                <p className="text-center text-white/60 py-4">No tasks yet. Add one above!</p>
-              ) : (
-                tasks.map((task, index) => (
-                  <div
-                    key={task.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg bg-white/10 transition-all ${
-                      task.completed ? 'opacity-60' : ''
-                    } ${activeTaskId === task.id ? 'bg-white/20 border border-white/40' : ''}`}
-                  >
-                    <div className="text-sm font-mono text-white/70 w-8">
-                      #{index + 1}
-                    </div>
-                    
-                    <Button
-                      onClick={() => toggleTask(task.id)}
-                      size="sm"
-                      variant="ghost"
-                      className={`p-1 rounded-full ${
-                        task.completed 
-                          ? 'bg-green-500 text-white' 
-                          : 'border-2 border-white/40 hover:bg-white/20'
-                      }`}
+          {/* Stats */}
+          <div className="text-center mb-8">
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4 inline-block">
+              <div className="text-2xl font-bold">{completedPomodoros}</div>
+              <div className="text-sm opacity-80">Pomodoros Completed</div>
+            </div>
+          </div>
+
+          {/* Task Section */}
+          <div className="max-w-2xl mx-auto">
+            <Card className="bg-white/10 backdrop-blur-sm border-white/20 p-6">
+              <h2 className="text-xl font-semibold mb-4 text-center">Tasks</h2>
+              
+              {/* Add Task */}
+              <div className="flex gap-2 mb-4">
+                <Input
+                  value={newTask}
+                  onChange={(e) => setNewTask(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addTask()}
+                  placeholder="Add a task..."
+                  className="bg-white/20 border-white/30 text-white placeholder:text-white/60 focus:bg-white/30"
+                />
+                <Button
+                  onClick={addTask}
+                  size="sm"
+                  className="bg-white text-gray-800 hover:bg-gray-100 px-3"
+                >
+                  <Plus size={16} />
+                </Button>
+              </div>
+
+              {/* Task List */}
+              <div className="space-y-2">
+                {tasks.length === 0 ? (
+                  <p className="text-center text-white/60 py-4">No tasks yet. Add one above!</p>
+                ) : (
+                  tasks.map((task, index) => (
+                    <div
+                      key={task.id}
+                      className={`flex items-center gap-3 p-3 rounded-lg bg-white/10 transition-all ${
+                        task.completed ? 'opacity-60' : ''
+                      } ${activeTaskId === task.id ? 'bg-white/20 border border-white/40' : ''}`}
                     >
-                      {task.completed && <Check size={12} />}
-                    </Button>
-                    
-                    <div className="flex-1">
-                      <div className={`${task.completed ? 'line-through' : ''} mb-1`}>
-                        {task.text}
+                      <div className="text-sm font-mono text-white/70 w-8">
+                        #{index + 1}
                       </div>
-                      <div className="flex items-center gap-4 text-xs">
-                        <span className={`${getStatusColor(task.status)} font-medium`}>
-                          {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                        </span>
-                        <span className="text-white/60">
-                          Time: {formatTime(task.timeSpent)}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {!task.completed && task.status !== 'in-progress' && (
+                      
                       <Button
-                        onClick={() => startTask(task.id)}
+                        onClick={() => toggleTask(task.id)}
                         size="sm"
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1"
+                        variant="ghost"
+                        className={`p-1 rounded-full ${
+                          task.completed 
+                            ? 'bg-green-500 text-white' 
+                            : 'border-2 border-white/40 hover:bg-white/20'
+                        }`}
                       >
-                        Start
+                        {task.completed && <Check size={12} />}
                       </Button>
-                    )}
-                    
-                    <Button
-                      onClick={() => deleteTask(task.id)}
-                      size="sm"
-                      variant="ghost"
-                      className="p-1 hover:bg-red-500/20 text-red-200 hover:text-red-100"
-                    >
-                      <X size={14} />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
+                      
+                      <div className="flex-1">
+                        <div className={`${task.completed ? 'line-through' : ''} mb-1`}>
+                          {task.text}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs">
+                          <span className={`${getStatusColor(task.status)} font-medium`}>
+                            {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                          </span>
+                          <span className="text-white/60">
+                            Time: {formatTime(task.timeSpent)}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {!task.completed && task.status !== 'in-progress' && (
+                        <Button
+                          onClick={() => startTask(task.id)}
+                          size="sm"
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1"
+                        >
+                          Start
+                        </Button>
+                      )}
+                      
+                      <Button
+                        onClick={() => deleteTask(task.id)}
+                        size="sm"
+                        variant="ghost"
+                        className="p-1 hover:bg-red-500/20 text-red-200 hover:text-red-100"
+                      >
+                        <X size={14} />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+          </div>
         </div>
-      </div>
 
-      {/* Alert Dialog */}
-      <AlertDialog open={showAlert} onOpenChange={setShowAlert}>
-        <AlertDialogContent className="bg-white">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-gray-800 text-xl">
-              {alertTitle}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-600">
-              {alertDescription}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogAction 
-            onClick={() => setShowAlert(false)}
-            className="bg-blue-500 hover:bg-blue-600 text-white"
-          >
-            OK
-          </AlertDialogAction>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+        {/* Alert Dialog */}
+        <AlertDialog open={showAlert} onOpenChange={setShowAlert}>
+          <AlertDialogContent className="bg-white">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-gray-800 text-xl">
+                {alertTitle}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-600">
+                {alertDescription}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogAction 
+              onClick={() => setShowAlert(false)}
+              className="bg-blue-500 hover:bg-blue-600 text-white"
+            >
+              OK
+            </AlertDialogAction>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </>
   );
 };
 
