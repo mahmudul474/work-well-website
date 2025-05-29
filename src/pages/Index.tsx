@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, SkipForward, Plus, Check, X } from 'lucide-react';
+import { Play, Pause, SkipForward, Plus, Check, X, Minimize2, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -18,6 +18,9 @@ interface Task {
   id: number;
   text: string;
   completed: boolean;
+  status: 'pending' | 'in-progress' | 'completed';
+  timeSpent: number; // in seconds
+  startTime?: number;
 }
 
 const Index = () => {
@@ -35,8 +38,11 @@ const Index = () => {
   const [showAlert, setShowAlert] = useState(false);
   const [alertTitle, setAlertTitle] = useState('');
   const [alertDescription, setAlertDescription] = useState('');
+  const [isBubbleMode, setIsBubbleMode] = useState(false);
+  const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const taskTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const modeConfig = {
     pomodoro: { 
@@ -58,6 +64,29 @@ const Index = () => {
       textColor: 'text-white'
     }
   };
+
+  // Task timer effect
+  useEffect(() => {
+    if (isRunning && activeTaskId && mode === 'pomodoro') {
+      taskTimerRef.current = setInterval(() => {
+        setTasks(prev => prev.map(task => 
+          task.id === activeTaskId 
+            ? { ...task, timeSpent: task.timeSpent + 1 }
+            : task
+        ));
+      }, 1000);
+    } else {
+      if (taskTimerRef.current) {
+        clearInterval(taskTimerRef.current);
+      }
+    }
+
+    return () => {
+      if (taskTimerRef.current) {
+        clearInterval(taskTimerRef.current);
+      }
+    };
+  }, [isRunning, activeTaskId, mode]);
 
   useEffect(() => {
     if (isRunning && timeLeft > 0) {
@@ -107,6 +136,14 @@ const Index = () => {
   const handleTimerComplete = () => {
     if (mode === 'pomodoro') {
       setCompletedPomodoros(prev => prev + 1);
+      if (activeTaskId) {
+        setTasks(prev => prev.map(task => 
+          task.id === activeTaskId 
+            ? { ...task, status: 'completed' as const, completed: true }
+            : task
+        ));
+        setActiveTaskId(null);
+      }
       setAlertTitle('Task Time Complete!');
       setAlertDescription('Great work! Time for a well-deserved break. Take a moment to relax and recharge.');
       toast({
@@ -157,20 +194,44 @@ const Index = () => {
       setTasks(prev => [...prev, {
         id: Date.now(),
         text: newTask.trim(),
-        completed: false
+        completed: false,
+        status: 'pending',
+        timeSpent: 0
       }]);
       setNewTask('');
     }
   };
 
+  const startTask = (id: number) => {
+    setTasks(prev => prev.map(task => 
+      task.id === id 
+        ? { ...task, status: 'in-progress' as const, startTime: Date.now() }
+        : { ...task, status: task.status === 'completed' ? 'completed' : 'pending' }
+    ));
+    setActiveTaskId(id);
+    if (mode !== 'pomodoro') {
+      switchMode('pomodoro');
+    }
+  };
+
   const toggleTask = (id: number) => {
     setTasks(prev => prev.map(task => 
-      task.id === id ? { ...task, completed: !task.completed } : task
+      task.id === id ? { 
+        ...task, 
+        completed: !task.completed,
+        status: !task.completed ? 'completed' as const : 'pending' as const
+      } : task
     ));
+    if (activeTaskId === id) {
+      setActiveTaskId(null);
+    }
   };
 
   const deleteTask = (id: number) => {
     setTasks(prev => prev.filter(task => task.id !== id));
+    if (activeTaskId === id) {
+      setActiveTaskId(null);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -179,7 +240,69 @@ const Index = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const getStatusColor = (status: Task['status']) => {
+    switch (status) {
+      case 'pending': return 'text-yellow-400';
+      case 'in-progress': return 'text-blue-400';
+      case 'completed': return 'text-green-400';
+      default: return 'text-gray-400';
+    }
+  };
+
   const currentConfig = modeConfig[mode];
+
+  // Bubble Mode Component
+  if (isBubbleMode) {
+    return (
+      <div className="fixed top-4 right-4 z-50">
+        <Card className="bg-black/80 backdrop-blur-sm border-white/20 p-4 text-white min-w-[200px]">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold">{currentConfig.label}</h3>
+            <Button
+              onClick={() => setIsBubbleMode(false)}
+              size="sm"
+              variant="ghost"
+              className="p-1 h-6 w-6 text-white hover:bg-white/20"
+            >
+              <Maximize2 size={12} />
+            </Button>
+          </div>
+          
+          <div className="text-center mb-3">
+            <div className="text-2xl font-mono font-bold">
+              {formatTime(timeLeft)}
+            </div>
+          </div>
+          
+          <div className="flex gap-2 justify-center mb-2">
+            <Button
+              onClick={toggleTimer}
+              size="sm"
+              className="bg-white text-black hover:bg-gray-200 px-3 py-1"
+            >
+              {isRunning ? <Pause size={12} /> : <Play size={12} />}
+            </Button>
+            <Button
+              onClick={resetTimer}
+              size="sm"
+              variant="outline"
+              className="border-white text-white hover:bg-white hover:text-black px-3 py-1"
+            >
+              <SkipForward size={12} />
+            </Button>
+          </div>
+          
+          {activeTaskId && (
+            <div className="text-xs text-center">
+              <div className="truncate">
+                {tasks.find(t => t.id === activeTaskId)?.text}
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen transition-all duration-1000 ${currentConfig.bgClass} ${currentConfig.textColor}`}>
@@ -187,7 +310,14 @@ const Index = () => {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-between items-center mb-2">
-            <div></div>
+            <Button
+              onClick={() => setIsBubbleMode(true)}
+              variant="ghost"
+              className="text-white hover:bg-white/20 px-3 py-2"
+            >
+              <Minimize2 size={16} className="mr-2" />
+              Bubble Mode
+            </Button>
             <h1 className="text-4xl font-bold">Pomofocus</h1>
             <TimerSettings
               pomodoroTime={customTimes.pomodoroTime}
@@ -264,7 +394,7 @@ const Index = () => {
         </div>
 
         {/* Task Section */}
-        <div className="max-w-md mx-auto">
+        <div className="max-w-2xl mx-auto">
           <Card className="bg-white/10 backdrop-blur-sm border-white/20 p-6">
             <h2 className="text-xl font-semibold mb-4 text-center">Tasks</h2>
             
@@ -291,13 +421,17 @@ const Index = () => {
               {tasks.length === 0 ? (
                 <p className="text-center text-white/60 py-4">No tasks yet. Add one above!</p>
               ) : (
-                tasks.map((task) => (
+                tasks.map((task, index) => (
                   <div
                     key={task.id}
                     className={`flex items-center gap-3 p-3 rounded-lg bg-white/10 transition-all ${
                       task.completed ? 'opacity-60' : ''
-                    }`}
+                    } ${activeTaskId === task.id ? 'bg-white/20 border border-white/40' : ''}`}
                   >
+                    <div className="text-sm font-mono text-white/70 w-8">
+                      #{index + 1}
+                    </div>
+                    
                     <Button
                       onClick={() => toggleTask(task.id)}
                       size="sm"
@@ -311,9 +445,29 @@ const Index = () => {
                       {task.completed && <Check size={12} />}
                     </Button>
                     
-                    <span className={`flex-1 ${task.completed ? 'line-through' : ''}`}>
-                      {task.text}
-                    </span>
+                    <div className="flex-1">
+                      <div className={`${task.completed ? 'line-through' : ''} mb-1`}>
+                        {task.text}
+                      </div>
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className={`${getStatusColor(task.status)} font-medium`}>
+                          {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                        </span>
+                        <span className="text-white/60">
+                          Time: {formatTime(task.timeSpent)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {!task.completed && task.status !== 'in-progress' && (
+                      <Button
+                        onClick={() => startTask(task.id)}
+                        size="sm"
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1"
+                      >
+                        Start
+                      </Button>
+                    )}
                     
                     <Button
                       onClick={() => deleteTask(task.id)}
