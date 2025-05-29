@@ -310,58 +310,10 @@ const Index = () => {
   const currentConfig = modeConfig[mode];
   const activeTask = tasks.find(task => task.id === activeTaskId);
 
-  // Bubble Mode Component
-  if (isBubbleMode) {
-    return (
-      <div className="fixed top-4 right-4 z-50">
-        <Card className="bg-black/80 backdrop-blur-sm border-white/20 p-4 text-white min-w-[200px]">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold">{currentConfig.label}</h3>
-            <Button
-              onClick={() => setIsBubbleMode(false)}
-              size="sm"
-              variant="ghost"
-              className="p-1 h-6 w-6 text-white hover:bg-white/20"
-            >
-              <Maximize2 size={12} />
-            </Button>
-          </div>
-          
-          <div className="text-center mb-3">
-            <div className="text-2xl font-mono font-bold">
-              {formatTime(timeLeft)}
-            </div>
-          </div>
-          
-          <div className="flex gap-2 justify-center mb-2">
-            <Button
-              onClick={toggleTimer}
-              size="sm"
-              className="bg-white text-black hover:bg-gray-200 px-3 py-1"
-            >
-              {isRunning ? <Pause size={12} /> : <Play size={12} />}
-            </Button>
-            <Button
-              onClick={resetTimer}
-              size="sm"
-              variant="outline"
-              className="border-white text-white hover:bg-white hover:text-black px-3 py-1"
-            >
-              <SkipForward size={12} />
-            </Button>
-          </div>
-          
-          {activeTaskId && (
-            <div className="text-xs text-center">
-              <div className="truncate">
-                {tasks.find(t => t.id === activeTaskId)?.text}
-              </div>
-            </div>
-          )}
-        </Card>
-      </div>
-    );
-  }
+  const handleBubbleMode = () => {
+    setShowPersistentBubble(true);
+    // Don't set isBubbleMode to true anymore since we're using popup
+  };
 
   return (
     <>
@@ -370,7 +322,6 @@ const Index = () => {
         onClose={() => setShowPersistentBubble(false)}
         onExpand={() => {
           setShowPersistentBubble(false);
-          setIsBubbleMode(false);
         }}
         timeLeft={timeLeft}
         isRunning={isRunning}
@@ -387,10 +338,7 @@ const Index = () => {
             <div className="flex justify-between items-center mb-2">
               <div className="flex gap-2">
                 <Button
-                  onClick={() => {
-                    setIsBubbleMode(true);
-                    setShowPersistentBubble(true);
-                  }}
+                  onClick={handleBubbleMode}
                   variant="ghost"
                   className="text-white hover:bg-white/20 px-3 py-2"
                 >
